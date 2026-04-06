@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Predictor — NSE India</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --blue:     #58a6ff;
+    --purple:   #bc8cff;
+    --accent:   #1f6feb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { font-size: 1.2rem; font-weight: 600; color: var(--blue); }
+  header span { color: var(--muted); font-size: 0.85rem; }
+
+  /* ── Layout ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Search form ── */
+  .search-card { background: var(--surface); border: 1px solid var(--border);
+                 border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+  .search-card h2 { font-size: 1rem; color: var(--muted); margin-bottom: 1rem; }
+  .search-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .search-row input { background: var(--bg); border: 1px solid var(--border);
+                      color: var(--text); border-radius: 8px; padding: 0.6rem 1rem;
+                      font-size: 0.95rem; flex: 1; min-width: 160px; }
+  .search-row input:focus { outline: none; border-color: var(--accent); }
+  .search-row button { background: var(--accent); color: #fff; border: none;
+                       border-radius: 8px; padding: 0.6rem 1.5rem; font-size: 0.95rem;
+                       cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .search-row button:hover { background: #388bfd; }
+  .search-row button:disabled { background: var(--border); cursor: not-allowed; }
+
+  /* ── Quick symbols ── */
+  .quick { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .chip { background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+          border-radius: 20px; padding: 0.25rem 0.75rem; font-size: 0.8rem;
+          cursor: pointer; transition: all .15s; }
+  .chip:hover { border-color: var(--blue); color: var(--blue); }
+
+  /* ── Status ── */
+  #status { text-align: center; padding: 2rem; color: var(--muted); display: none; }
+  .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border);
+             border-top-color: var(--blue); border-radius: 50%;
+             animation: spin .8s linear infinite; margin-bottom: 1rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Result sections ── */
+  #result { display: none; }
+
+  .price-banner { background: var(--surface); border: 1px solid var(--border);
+                  border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .price-banner .sym { font-size: 1.4rem; font-weight: 700; }
+  .price-banner .price { font-size: 2rem; font-weight: 700; }
+  .price-banner .chg { font-size: 1rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; }
+  .chg.up   { background: rgba(63,185,80,.15); color: var(--green); }
+  .chg.down { background: rgba(248,81,73,.15);  color: var(--red);   }
+  .chg.flat { background: rgba(139,148,158,.15);color: var(--muted); }
+
+  /* ── Bias badge ── */
+  .bias { display: inline-flex; align-items: center; gap: 0.4rem;
+          padding: 0.3rem 0.9rem; border-radius: 20px; font-weight: 700; font-size: 0.95rem; }
+  .bias.Bullish { background: rgba(63,185,80,.15); color: var(--green); }
+  .bias.Bearish { background: rgba(248,81,73,.15);  color: var(--red);   }
+  .bias.Neutral { background: rgba(139,148,158,.15);color: var(--muted); }
+  .bias.Mixed   { background: rgba(210,153,34,.15); color: var(--yellow);}
+
+  /* ── Horizon cards ── */
+  .horizons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  @media(max-width:700px) { .horizons { grid-template-columns: 1fr; } }
+  .h-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1.25rem; }
+  .h-card .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .h-card .dir   { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .h-card .mag   { font-size: 0.95rem; color: var(--muted); margin-bottom: 0.75rem; }
+  .conf-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 0.5rem; }
+  .conf-fill { height: 100%; border-radius: 3px; background: var(--blue); }
+  .h-card .reasoning { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+  .dir.Up   { color: var(--green); }
+  .dir.Down { color: var(--red);   }
+  .dir.Sideways { color: var(--yellow); }
+
+  /* ── Sections ── */
+  .section { background: var(--surface); border: 1px solid var(--border);
+             border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .section h3 { font-size: 0.9rem; color: var(--blue); text-transform: uppercase;
+                letter-spacing: .05em; margin-bottom: 1rem; }
+
+  /* ── Signal trace ── */
+  .sig-row { display: flex; gap: 0.75rem; align-items: flex-start;
+             padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .sig-row:last-child { border-bottom: none; }
+  .sig-weight { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.4rem;
+                border-radius: 4px; white-space: nowrap; min-width: 48px; text-align: center; }
+  .sig-weight.High   { background: rgba(248,81,73,.2);  color: var(--red);    }
+  .sig-weight.Medium { background: rgba(210,153,34,.2); color: var(--yellow); }
+  .sig-weight.Low    { background: rgba(139,148,158,.2);color: var(--muted);  }
+  .sig-dir { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.4rem;
+             border-radius: 4px; white-space: nowrap; min-width: 52px; text-align: center; }
+  .sig-dir.Bullish { background: rgba(63,185,80,.15); color: var(--green); }
+  .sig-dir.Bearish { background: rgba(248,81,73,.15); color: var(--red);   }
+  .sig-dir.Neutral { background: rgba(139,148,158,.15);color: var(--muted);}
+  .sig-body { flex: 1; }
+  .sig-name { font-size: 0.88rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .sig-interp { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+
+  /* ── Drivers / Risks ── */
+  .tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .tag { background: var(--bg); border: 1px solid var(--border);
+         border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.82rem; }
+
+  /* ── Signal counts ── */
+  .counts { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .count-chip { background: var(--surface); border: 1px solid var(--border);
+                border-radius: 8px; padding: 0.4rem 0.85rem; font-size: 0.82rem;
+                color: var(--muted); }
+  .count-chip span { color: var(--text); font-weight: 700; }
+
+  /* ── Error ── */
+  .error-box { background: rgba(248,81,73,.1); border: 1px solid var(--red);
+               border-radius: 8px; padding: 1rem; color: var(--red); margin-bottom: 1rem; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📈 NSE Stock Predictor</h1>
+  <span>LangGraph · Llama 3: 8B · Technical + OI + Hints + Correlation + Patterns</span>
+</header>
+
+<main>
+  <!-- Search -->
+  <div class="search-card">
+    <h2>Enter a company to predict</h2>
+    <div class="search-row">
+      <input id="inp-company" placeholder="Company name  e.g. Suzlon Energy" />
+      <input id="inp-symbol"  placeholder="NSE symbol  e.g. SUZLON" style="max-width:200px"/>
+      <button id="btn-predict" onclick="runPrediction()">Predict</button>
+    </div>
+    <div class="quick">
+      <span style="color:var(--muted);font-size:.8rem;align-self:center">Quick:</span>
+      <div class="chip" onclick="quick('Suzlon Energy','SUZLON')">SUZLON</div>
+      <div class="chip" onclick="quick('Infosys','INFY')">INFY</div>
+      <div class="chip" onclick="quick('HDFC Bank','HDFCBANK')">HDFCBANK</div>
+      <div class="chip" onclick="quick('Reliance Industries','RELIANCE')">RELIANCE</div>
+      <div class="chip" onclick="quick('Tata Motors','TATAMOTORS')">TATAMOTORS</div>
+      <div class="chip" onclick="quick('ICICI Bank','ICICIBANK')">ICICIBANK</div>
+      <div class="chip" onclick="quick('Zomato','ZOMATO')">ZOMATO</div>
+      <div class="chip" onclick="quick('Tata Power','TATAPOWER')">TATAPOWER</div>
+    </div>
+  </div>
+
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Loading -->
+  <div id="status">
+    <div class="spinner"></div>
+    <div id="status-msg">Initialising agents…</div>
+  </div>
+
+  <!-- Result -->
+  <div id="result"></div>
+</main>
+
+<script>
+const STEPS = [
+  "Checking F&O availability…",
+  "Fetching today's price & 60-day history…",
+  "Computing 10 technical signals…",
+  "Fetching live options chain (OI)…",
+  "Scanning bulk deals, insider trades, FII/DII, filings…",
+  "Running correlation analysis on peer stocks…",
+  "Matching historical signal patterns…",
+  "Llama 3.3 70B generating full prediction…",
+];
+
+let stepIdx = 0, stepTimer = null;
+
+function quick(company, symbol) {
+  document.getElementById('inp-company').value = company;
+  document.getElementById('inp-symbol').value  = symbol;
+}
+
+async function runPrediction() {
+  const company = document.getElementById('inp-company').value.trim();
+  const symbol  = document.getElementById('inp-symbol').value.trim().toUpperCase();
+  if (!company || !symbol) { alert('Please enter both company name and symbol'); return; }
+
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('result').style.display    = 'none';
+  document.getElementById('status').style.display    = 'block';
+  document.getElementById('btn-predict').disabled    = true;
+
+  stepIdx = 0;
+  document.getElementById('status-msg').textContent = STEPS[0];
+  stepTimer = setInterval(() => {
+    stepIdx = (stepIdx + 1) % STEPS.length;
+    document.getElementById('status-msg').textContent = STEPS[stepIdx];
+  }, 4000);
+
+  try {
+    const res  = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({company, symbol}),
+    });
+    const data = await res.json();
+    clearInterval(stepTimer);
+
+    if (!res.ok) throw new Error(data.detail || 'API error');
+
+    document.getElementById('status').style.display = 'none';
+    renderResult(data);
+  } catch (e) {
+    clearInterval(stepTimer);
+    document.getElementById('status').style.display    = 'none';
+    document.getElementById('error-box').style.display = 'block';
+    document.getElementById('error-box').textContent   = '✗ ' + e.message;
+  }
+
+  document.getElementById('btn-predict').disabled = false;
+}
+
+function renderResult(data) {
+  const pred  = data.prediction || {};
+  const price = data.today_price || {};
+  const counts = data.signal_counts || {};
+  const bias  = pred.overall_bias || 'Neutral';
+
+  const pct = parseFloat(price.pct_change || 0);
+  const pctClass = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+  const pctStr   = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+
+  let html = `
+  <div class="price-banner">
+    <div>
+      <div class="sym">${data.symbol} <span style="color:var(--muted);font-weight:400;font-size:1rem">· ${data.company}</span></div>
+      <div style="color:var(--muted);font-size:.8rem;margin-top:.2rem">${(data.run_timestamp||'').slice(0,16)}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div class="price">₹${price.close || 'N/A'}</div>
+      <div class="chg ${pctClass}">${pctStr}</div>
+      <div class="bias ${bias}">${bias === 'Bullish' ? '▲' : bias === 'Bearish' ? '▼' : '◆'} ${bias}</div>
+    </div>
+  </div>
+
+  <div class="counts">
+    <div class="count-chip">Technical <span>${counts.technical || 0}</span></div>
+    <div class="count-chip">OI <span>${counts.oi || 0}</span></div>
+    <div class="count-chip">Hints <span>${counts.hints || 0}</span></div>
+    <div class="count-chip">Correlation <span>${counts.correlation || 0}</span></div>
+    <div class="count-chip">Patterns matched <span>${counts.patterns || 0}</span></div>
+  </div>
+
+  <div class="horizons">
+    ${['horizon_1d','horizon_3d','horizon_7d'].map((k,i) => {
+      const h = pred[k] || {};
+      const labels = ['1 Day','3 Days','7 Days'];
+      const dir  = h.direction || 'Sideways';
+      const mag  = h.magnitude_pct || 0;
+      const conf = h.confidence   || 0;
+      const reason = h.reasoning  || '';
+      return `
+      <div class="h-card">
+        <div class="label">${labels[i]}</div>
+        <div class="dir ${dir}">${dir === 'Up' ? '▲ ' : dir === 'Down' ? '▼ ' : '◆ '}${dir}</div>
+        <div class="mag">~${Math.abs(mag).toFixed(1)}%</div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${conf}%"></div></div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Confidence: ${conf}%</div>
+        <div class="reasoning">${reason}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  // Key drivers + risks
+  const drivers = pred.key_drivers || [];
+  const risks   = pred.risks || [];
+  if (drivers.length || risks.length) {
+    html += `<div class="section">
+      <h3>Key Drivers & Risks</h3>
+      ${drivers.length ? `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">DRIVERS</div>
+        <div class="tag-list">${drivers.map(d=>`<div class="tag" style="color:var(--green)">▲ ${d}</div>`).join('')}</div></div>` : ''}
+      ${risks.length ? `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">RISKS</div>
+        <div class="tag-list">${risks.map(r=>`<div class="tag" style="color:var(--red)">⚠ ${r}</div>`).join('')}</div></div>` : ''}
+    </div>`;
+  }
+
+  // Signal trace
+  const trace = pred.signal_trace || [];
+  if (trace.length) {
+    html += `<div class="section"><h3>Full Signal Trace</h3>`;
+    for (const s of trace) {
+      html += `
+      <div class="sig-row">
+        <div class="sig-weight ${s.weight||'Low'}">${s.weight||'Low'}</div>
+        <div class="sig-dir ${s.direction||'Neutral'}">${s.direction||'Neutral'}</div>
+        <div class="sig-body">
+          <div class="sig-name">${s.signal||''}</div>
+          <div class="sig-interp">${s.interpretation||''}</div>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Pattern + correlation summaries
+  if (pred.pattern_match_summary || pred.correlation_summary) {
+    html += `<div class="section"><h3>Context</h3>`;
+    if (pred.pattern_match_summary)
+      html += `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">HISTORICAL PATTERNS</div>
+               <div style="font-size:.88rem;line-height:1.6">${pred.pattern_match_summary}</div></div>`;
+    if (pred.correlation_summary)
+      html += `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">PEER CORRELATION</div>
+               <div style="font-size:.88rem;line-height:1.6">${pred.correlation_summary}</div></div>`;
+    html += `</div>`;
+  }
+
+  // Errors
+  if (data.errors && data.errors.length) {
+    html += `<div style="color:var(--muted);font-size:.8rem;margin-top:1rem">
+      ⚠ Warnings: ${data.errors.join(' · ')}</div>`;
+  }
+
+  const el = document.getElementById('result');
+  el.innerHTML = html;
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
