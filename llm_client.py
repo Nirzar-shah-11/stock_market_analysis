@@ -2,7 +2,7 @@
 import time, requests
 from colorama import Fore, Style
 
-OLLAMA_MODEL = "llama3:70b"
+OLLAMA_MODEL = "llama3:8b"
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 
 class LLMClient:

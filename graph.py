@@ -1,17 +1,16 @@
 """
-graph.py — LangGraph Prediction Graph
-──────────────────────────────────────
+graph.py — LangGraph Prediction Graph (with news_node)
 
 orchestrator_node
       │
       ▼
 price_node
       │
-      ├──────────────────────┬──────────────────────┐
-      ▼                      ▼                      ▼
-technical_node          hints_node           oi_node (F&O only)
-      │                      │                      │
-      └──────────────┬────────┴──────────────────────┘
+      ├──────────────────────┬──────────────────────┬─────────────────────┐
+      ▼                      ▼                      ▼                     ▼
+technical_node          hints_node           oi_node (F&O)         news_node (MCP)
+      │                      │                      │                     │
+      └──────────────┬────────┴──────────────────────┴─────────────────────┘
                      ▼
             correlation_node
                      │
@@ -32,6 +31,7 @@ from nodes.price_node        import price_node
 from nodes.technical_node    import technical_node
 from nodes.oi_node           import oi_node
 from nodes.hints_node        import hints_node
+from nodes.news_node         import news_node
 from nodes.correlation_node  import correlation_node
 from nodes.pattern_node      import pattern_node
 from nodes.prediction_node   import prediction_node
@@ -45,26 +45,29 @@ def build_graph():
     g.add_node("technical_node",    technical_node)
     g.add_node("oi_node",           oi_node)
     g.add_node("hints_node",        hints_node)
+    g.add_node("news_node",         news_node)
     g.add_node("correlation_node",  correlation_node)
     g.add_node("pattern_node",      pattern_node)
     g.add_node("prediction_node",   prediction_node)
 
     g.set_entry_point("orchestrator_node")
 
-    # orchestrator → price (always first)
+    # orchestrator → price
     g.add_edge("orchestrator_node", "price_node")
 
-    # price → three parallel nodes
+    # price → four parallel nodes
     g.add_edge("price_node", "technical_node")
     g.add_edge("price_node", "hints_node")
-    g.add_edge("price_node", "oi_node")   # oi_node self-skips if not F&O
+    g.add_edge("price_node", "oi_node")
+    g.add_edge("price_node", "news_node")      # ← new
 
-    # all three → correlation
+    # all four → correlation
     g.add_edge("technical_node", "correlation_node")
     g.add_edge("hints_node",     "correlation_node")
     g.add_edge("oi_node",        "correlation_node")
+    g.add_edge("news_node",      "correlation_node")  # ← new
 
-    # correlation → pattern → prediction → END
+    # linear tail
     g.add_edge("correlation_node", "pattern_node")
     g.add_edge("pattern_node",     "prediction_node")
     g.add_edge("prediction_node",  END)

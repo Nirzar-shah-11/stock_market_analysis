@@ -51,9 +51,11 @@ async def predict(req: PredictRequest):
                 "technical":   len(final.get("today_tech", [])),
                 "oi":          len(final.get("today_oi", [])),
                 "hints":       len(final.get("today_hints", [])),
+                "news":        len(final.get("news_articles", [])),
                 "correlation": len(final.get("correlation_signals", [])),
                 "patterns":    len(final.get("similar_patterns", [])),
             },
+            "news_articles": final.get("news_articles", []),
             "prediction":    pred,
             "errors":        errors,
         }

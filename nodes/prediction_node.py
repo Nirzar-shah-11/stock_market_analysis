@@ -160,6 +160,20 @@ def _build_prompt(state: PredictionState) -> str:
         lines.append("No significant peer moves detected.")
         lines.append("")
 
+    # News articles
+    news = state.get("news_articles", [])
+    lines.append("═══ RECENT NEWS (Google News RSS) ═══")
+    if news:
+        for art in news[:5]:   # top 5 for context
+            lines.append(f"[{art.get('sentiment_hint','neutral').upper()}] {art.get('source','')} | {art.get('date_display','')}")
+            lines.append(f"  Headline: {art.get('title','')}")
+            if art.get("point1"): lines.append(f"  • {art['point1']}")
+            if art.get("point2"): lines.append(f"  • {art['point2']}")
+            lines.append("")
+    else:
+        lines.append("No recent news found.")
+        lines.append("")
+        
     # Historical patterns
     lines.append("═══ HISTORICAL PATTERN MATCHES ═══")
     if patterns:
