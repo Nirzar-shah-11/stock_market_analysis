@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from state import fresh_state
 from graph import graph
+import warnings
+warnings.filterwarnings("ignore", message="no explicit representation of timezones")
 
 load_dotenv()
 

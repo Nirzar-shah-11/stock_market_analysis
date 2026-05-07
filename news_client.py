@@ -16,6 +16,13 @@ import requests
 from pathlib import Path
 from colorama import Fore, Style
 
+# Import fetch_news directly instead of using subprocess due to stdio buffering issues with MCP subprocess calls.
+try:
+    from server import fetch_news as server_fetch_news
+    USE_DIRECT_IMPORT = True
+except ImportError:
+    USE_DIRECT_IMPORT = False
+
 SERVER_SCRIPT = Path(__file__).parent / "server.py"
 
 OLLAMA_MODEL = "llama3:8b"
@@ -49,7 +56,7 @@ class NewsClient:
         self,
         company_name: str,
         symbol:       str,
-        max_articles: int = 8,
+        max_articles: int = 20,
         days_back:    int = 7,
     ) -> list[dict]:
         """
@@ -93,50 +100,31 @@ class NewsClient:
         _log(f"✓ {len(enriched)} articles enriched with summaries", success=True)
         return enriched
 
-    # ── MCP call (stdio JSON-RPC) ─────────────────────────────────────────────
+    # ── Direct function call (replaces MCP subprocess) ─────────────────────────
 
     def _call_mcp(self, tool_name: str, arguments: dict) -> list[dict]:
-        init_msg = json.dumps({
-            "jsonrpc": "2.0", "id": 0, "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "news-client", "version": "1.0"},
-            },
-        }) + "\n"
-
-        tool_msg = json.dumps({
-            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        }) + "\n"
-
+        """
+        Direct call to fetch_news (bypasses MCP subprocess which has stdio issues)
+        """
+        if not USE_DIRECT_IMPORT:
+            _log("fetch_news not available", warn=True)
+            return []
+        
         try:
-            proc = subprocess.Popen(
-                [sys.executable, self.server_script],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            stdout, _ = proc.communicate(input=init_msg + tool_msg, timeout=30)
-
-            for line in reversed(stdout.strip().splitlines()):
-                try:
-                    rpc = json.loads(line.strip())
-                    text = (rpc.get("result", {})
-                               .get("content", [{}])[0]
-                               .get("text", "{}"))
-                    data = json.loads(text)
-                    return data.get("articles", []) if data.get("success") else []
-                except Exception:
-                    continue
-
-        except subprocess.TimeoutExpired:
-            _log("MCP server timeout", warn=True)
+            if tool_name == "fetch_news":
+                result_json = server_fetch_news(
+                    query=arguments.get("query", ""),
+                    max_results=arguments.get("max_results", 10),
+                    days_back=arguments.get("days_back", 7),
+                )
+                data = json.loads(result_json)
+                return data.get("articles", []) if data.get("success") else []
+            else:
+                _log(f"Unknown tool: {tool_name}", warn=True)
+                return []
         except Exception as e:
-            _log(f"MCP error: {e}", warn=True)
-
-        return []
+            _log(f"Direct call error: {e}", warn=True)
+            return []
 
     # ── Llama 3 summariser ────────────────────────────────────────────────────
 

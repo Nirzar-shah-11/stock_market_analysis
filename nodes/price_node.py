@@ -4,27 +4,23 @@ nodes/price_node.py
 Fetches:
   1. Today's live quote (open, high, low, close, volume, % change)
   2. Last 60 days of OHLCV history (for pattern matching)
+
+Uses jugaad_data.nse.NSELive and stock_df for reliable data fetching.
 """
 
-import time, requests
 import pandas as pd
 from datetime import date, timedelta
 from colorama import Fore, Style
 from state import PredictionState
-
-NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Referer": "https://www.nseindia.com/",
-    "Accept": "application/json, text/plain, */*",
-}
+from jugaad_data.nse import NSELive, stock_df
 
 def price_node(state: PredictionState) -> dict:
     symbol = state["symbol"].upper()
     _log(f"Fetching price data for {symbol}…")
 
-    session = _session()
+    nse_live = NSELive()
 
-    today_price = _fetch_live_quote(session, symbol)
+    today_price = _fetch_live_quote(nse_live, symbol)
     history_df  = _fetch_history(symbol)
 
     if today_price:
@@ -57,88 +53,138 @@ def price_node(state: PredictionState) -> dict:
 
 # ── Live quote ────────────────────────────────────────────────────────────────
 
-def _fetch_live_quote(session, symbol: str) -> dict | None:
+def _fetch_live_quote(nse_live, symbol: str) -> dict | None:
+    """
+    Fetch live quote using NSELive.
+    NSELive.stock_quote returns nested dict with priceInfo section.
+    """
     try:
-        url  = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
-        resp = session.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        pd_  = data.get("priceInfo", {})
+        quote = nse_live.stock_quote(symbol)
+        
+        if not quote or not isinstance(quote, dict):
+            return None
+        
+        # NSELive stock_quote response structure has priceInfo nested
+        price_info = quote.get("priceInfo", {}) or {}
+        pre_open = quote.get("preOpenMarket", {}) or {}
+        
+        # Extract high/low from intraDayHighLow
+        intra_high_low = price_info.get("intraDayHighLow", {}) or {}
+        
+        # Extract values
+        open_price = float(price_info.get("open", 0) or 0)
+        close_price = float(price_info.get("lastPrice", 0) or 0)
+        high_price = float(intra_high_low.get("max", 0) or 0)
+        low_price = float(intra_high_low.get("min", 0) or 0)
+        prev_close = float(price_info.get("previousClose", 0) or 0)
+        volume = float(pre_open.get("totalTradedVolume", 0) or 0)  # From preOpenMarket
+        pct_change = float(price_info.get("pChange", 0) or 0)
+        
         return {
-            "open":       pd_.get("open", 0),
-            "high":       pd_.get("intraDayHighLow", {}).get("max", 0),
-            "low":        pd_.get("intraDayHighLow", {}).get("min", 0),
-            "close":      pd_.get("lastPrice", 0),
-            "prev_close": pd_.get("previousClose", 0),
-            "volume":     data.get("marketDeptOrderBook", {}).get("tradeInfo", {}).get("totalTradedVolume", 0),
-            "pct_change": pd_.get("pChange", 0),
+            "open":       open_price,
+            "high":       high_price,
+            "low":        low_price,
+            "close":      close_price,
+            "prev_close": prev_close,
+            "volume":     volume,
+            "pct_change": pct_change,
         }
-    except Exception:
+    except Exception as e:
+        _log(f"Quote fetch error: {e}", warn=True)
         return None
 
 # ── 60-day history ────────────────────────────────────────────────────────────
 
 def _fetch_history(symbol: str) -> pd.DataFrame | None:
+    """
+    Fetch last 60 trading days of OHLCV using jugaad_data.
+    """
     end   = date.today()
     start = end - timedelta(days=90)  # fetch 90 to get ~60 trading days
 
-    # Try jugaad first
     try:
-        from jugaad_data.nse import stock_df
         df = stock_df(symbol=symbol, from_date=start, to_date=end, series="EQ")
+        
         if df is not None and not df.empty:
-            return _normalize(df, symbol)
-    except Exception:
-        pass
-
-    # Fallback: NSE API
-    try:
-        session = _session()
-        fmt = "%d-%m-%Y"
-        url = (
-            "https://www.nseindia.com/api/historical/cm/equity"
-            f"?symbol={symbol}&series=[%22EQ%22]"
-            f"&from={start.strftime(fmt)}&to={end.strftime(fmt)}"
-        )
-        resp = session.get(url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        if data:
-            return _normalize(pd.DataFrame(data), symbol)
-    except Exception:
-        pass
+            _log(f"Got {len(df)} days from stock_df", success=True)
+            normalized = _normalize(df, symbol)
+            if normalized is not None:
+                _log(f"Normalized to {len(normalized)} days", success=True)
+                return normalized
+            else:
+                _log("Normalization returned None", warn=True)
+        else:
+            _log("Empty dataframe from stock_df", warn=True)
+    except Exception as e:
+        _log(f"stock_df error: {e}", warn=True)
 
     return None
 
 def _normalize(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
-    col_map = {
-        "CH_TIMESTAMP": "Date", "CH_OPENING_PRICE": "Open",
-        "CH_TRADE_HIGH_PRICE": "High", "CH_TRADE_LOW_PRICE": "Low",
-        "CH_CLOSING_PRICE": "Close", "CH_TOT_TRADED_QTY": "Volume",
-        "COP_DELIV_QTY": "Deliverable_Volume",
-        "openPrice": "Open", "highPrice": "High", "lowPrice": "Low",
-        "ltp": "Close", "tradedDate": "Date", "mTRADED_QTY": "Volume",
-    }
-    df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-    for col in ["Open","High","Low","Close","Volume"]:
-        if col not in df.columns: df[col] = None
-    if "Deliverable_Volume" not in df.columns: df["Deliverable_Volume"] = None
-    df["Date"] = pd.to_datetime(df["Date"]).dt.date
-    df["Symbol"] = symbol
-    for col in ["Open","High","Low","Close","Volume","Deliverable_Volume"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df.sort_values("Date").reset_index(drop=True).tail(60)
-
-def _session():
-    s = requests.Session()
-    s.headers.update(NSE_HEADERS)
+    """
+    Normalize jugaad_data stock_df columns to standard format.
+    jugaad_data returns: DATE, SERIES, OPEN, HIGH, LOW, CLOSE, VOLUME, etc.
+    """
     try:
-        s.get("https://www.nseindia.com", timeout=8)
-        time.sleep(0.5)
-    except Exception:
-        pass
-    return s
+        # Handle duplicate Close: both CLOSE and LTP columns exist
+        # Use CLOSE if available, otherwise use LTP, but not both
+        if "CLOSE" in df.columns and "LTP" in df.columns:
+            df = df.drop(columns=["LTP"])
+        
+        # Map jugaad_data columns (uppercase) to standard format
+        col_map = {
+            "DATE":         "Date",
+            "OPEN":         "Open",
+            "HIGH":         "High",
+            "LOW":          "Low",
+            "CLOSE":        "Close",
+            "VOLUME":       "Volume",
+            "PREV. CLOSE":  "Prev_Close",
+            "DELIVERY QTY": "Deliverable_Volume",
+        }
+        
+        # Rename columns that exist
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        
+        # Ensure all required columns exist FIRST
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            if col not in df.columns:
+                df[col] = 0.0
+        
+        # Add symbol column
+        df["Symbol"] = symbol
+        
+        # Convert numeric columns FIRST (before touching dates)
+        for col in ["Open", "High", "Low", "Close"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        
+        if "Volume" in df.columns:
+            df["Volume"] = pd.to_numeric(df["Volume"], errors="coerce").fillna(0).astype(int)
+        
+        if "Deliverable_Volume" in df.columns:
+            df["Deliverable_Volume"] = pd.to_numeric(df["Deliverable_Volume"], errors="coerce").fillna(0).astype(int)
+        
+        # NOW convert DATE column to date object AFTER all other conversions
+        if "Date" in df.columns:
+            try:
+                # Convert datetime64[ms] to datetime, then to date
+                df["Date"] = pd.to_datetime(df["Date"])
+                df = df.sort_values("Date", na_position='last').reset_index(drop=True)
+                df["Date"] = df["Date"].dt.date
+            except Exception as e:
+                _log(f"Date handling failed: {e}", warn=True)
+                df = df.reset_index(drop=True)
+        else:
+            df = df.reset_index(drop=True)
+        
+        return df.tail(60)
+    
+    except Exception as e:
+        _log(f"Normalize error: {e}", warn=True)
+        import traceback
+        traceback.print_exc()
+        return None
 
 def _log(msg, warn=False, success=False):
     tag = f"{Fore.CYAN}[Price Node]{Style.RESET_ALL}"

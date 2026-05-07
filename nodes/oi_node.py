@@ -3,18 +3,16 @@ nodes/oi_node.py
 ─────────────────
 Fetches today's live options chain from NSE for F&O stocks.
 Computes: PCR, max pain, OI buildup direction.
+
+Uses jugaad_data.nse.NSELive for reliable options data fetching
+(replaces direct HTTP API which returns empty responses).
 """
 
-import time, requests
+import time
 import pandas as pd
 from colorama import Fore, Style
 from state import PredictionState
-
-NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Referer": "https://www.nseindia.com/",
-    "Accept": "application/json, text/plain, */*",
-}
+from jugaad_data.nse import NSELive
 
 
 def oi_node(state: PredictionState) -> dict:
@@ -27,11 +25,10 @@ def oi_node(state: PredictionState) -> dict:
 
     signals = []
     try:
-        session = _session()
-        url  = f"https://www.nseindia.com/api/option-chain-equities?symbol={symbol}"
-        resp = session.get(url, timeout=15)
-        resp.raise_for_status()
-        data   = resp.json()
+        # Fetch options chain using NSELive (jugaad_data)
+        nse_live = NSELive()
+        data = nse_live.equities_option_chain(symbol)
+        
         records = data.get("records", {}).get("data", [])
         spot    = data.get("records", {}).get("underlyingValue", 0)
 
@@ -142,16 +139,6 @@ def _s(name, detail, bias, score_hint, explanation="") -> dict:
         "explanation":  explanation,
         "raw":          f"[OI] {name}: {detail}",
     }
-
-def _session():
-    s = requests.Session()
-    s.headers.update(NSE_HEADERS)
-    try:
-        s.get("https://www.nseindia.com", timeout=8)
-        time.sleep(0.5)
-    except Exception:
-        pass
-    return s
 
 def _log(msg, warn=False, success=False):
     tag = f"{Fore.MAGENTA}[OI Node]{Style.RESET_ALL}"

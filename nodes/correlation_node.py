@@ -13,18 +13,13 @@ Logic:
   5. Flags peers with significant moves that likely impact this stock
 """
 
-import time, requests
+import time
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
 from colorama import Fore, Style
 from state import PredictionState
-
-NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Referer": "https://www.nseindia.com/",
-    "Accept": "application/json, text/plain, */*",
-}
+from jugaad_data.nse import NSELive
 
 # Peer map: sector keyword → list of (symbol, name)
 SECTOR_PEERS = {
@@ -68,11 +63,11 @@ def correlation_node(state: PredictionState) -> dict:
     history_df = state.get("history_df")
     _log(f"Correlation analysis for {symbol}…")
 
-    session = _session()
+    nse_live = NSELive()
     signals = []
 
     # ── Get sector ────────────────────────────────────────────────────────────
-    sector = _get_sector(session, symbol)
+    sector = _get_sector(nse_live, symbol)
     _log(f"  Sector: {sector or 'unknown'}")
 
     # ── Find peers ────────────────────────────────────────────────────────────
@@ -87,7 +82,7 @@ def correlation_node(state: PredictionState) -> dict:
         if peer_sym == symbol:
             continue
         try:
-            pct = _get_today_pct(session, peer_sym)
+            pct = _get_today_pct(nse_live, peer_sym)
             if pct is None:
                 continue
 
@@ -131,11 +126,12 @@ def correlation_node(state: PredictionState) -> dict:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_sector(session, symbol: str) -> str:
+def _get_sector(nse_live: NSELive, symbol: str) -> str:
+    """Get sector using NSELive"""
     try:
-        r = session.get(
-            f"https://www.nseindia.com/api/quote-equity?symbol={symbol}", timeout=10)
-        return r.json().get("industryInfo", {}).get("industry", "").upper()
+        quote = nse_live.stock_quote(symbol)
+        sector = quote.get("industryInfo", {}).get("industry", "").upper()
+        return sector if sector else ""
     except Exception:
         return ""
 
@@ -149,11 +145,12 @@ def _find_peers(symbol: str, sector: str) -> list[tuple]:
             break
     return peers[:8]   # cap at 8 peers
 
-def _get_today_pct(session, symbol: str) -> float | None:
+def _get_today_pct(nse_live: NSELive, symbol: str) -> float | None:
+    """Get today's % change using NSELive"""
     try:
-        r = session.get(
-            f"https://www.nseindia.com/api/quote-equity?symbol={symbol}", timeout=8)
-        return float(r.json().get("priceInfo", {}).get("pChange", 0) or 0)
+        quote = nse_live.stock_quote(symbol)
+        pct = float(quote.get("priceInfo", {}).get("pChange", 0) or 0)
+        return pct if pct != 0 else None
     except Exception:
         return None
 
@@ -202,16 +199,6 @@ def _compute_correlations(
         pass
 
     return corr_map
-
-def _session():
-    s = requests.Session()
-    s.headers.update(NSE_HEADERS)
-    try:
-        s.get("https://www.nseindia.com", timeout=8)
-        time.sleep(0.5)
-    except Exception:
-        pass
-    return s
 
 def _log(msg, warn=False, success=False):
     tag = f"{Fore.GREEN}[Correlation Node]{Style.RESET_ALL}"
