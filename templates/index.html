@@ -124,6 +124,23 @@
   .tag { background: var(--bg); border: 1px solid var(--border);
          border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.82rem; }
 
+  /* ── Recommendation ── */
+  .recommendation { background: var(--surface); border: 2px solid var(--border);
+                    border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .rec-action { font-size: 2rem; font-weight: 900; margin-bottom: 0.5rem; letter-spacing: .05em; }
+  .rec-action.BUY   { color: var(--green); }
+  .rec-action.SELL  { color: var(--red); }
+  .rec-action.HOLD  { color: var(--yellow); }
+  .rec-conf { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
+  .rec-signals { display: flex; gap: 1.5rem; margin-bottom: 0.75rem; }
+  .rec-signal-group { }
+  .rec-signal-group .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .rec-signal-group .value { font-size: 1.3rem; font-weight: 700; }
+  .rec-signal-group.bullish .value { color: var(--green); }
+  .rec-signal-group.bearish .value { color: var(--red); }
+  .rec-reasoning { font-size: 0.9rem; line-height: 1.6; margin-top: 1rem; padding-top: 1rem;
+                   border-top: 1px solid var(--border); }
+
   /* ── Signal counts ── */
   .counts { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
   .count-chip { background: var(--surface); border: 1px solid var(--border);
@@ -238,6 +255,7 @@ async function runPrediction() {
 
 function renderResult(data) {
   const pred  = data.prediction || {};
+  const rec   = data.recommendation || {};
   const price = data.today_price || {};
   const counts = data.signal_counts || {};
   const bias  = pred.overall_bias || 'Neutral';
@@ -265,8 +283,29 @@ function renderResult(data) {
     <div class="count-chip">Hints <span>${counts.hints || 0}</span></div>
     <div class="count-chip">Correlation <span>${counts.correlation || 0}</span></div>
     <div class="count-chip">Patterns matched <span>${counts.patterns || 0}</span></div>
-  </div>
+  </div>`;
 
+  // Recommendation section
+  if (rec.action) {
+    html += `
+  <div class="recommendation">
+    <div class="rec-action ${rec.action}">${rec.action}</div>
+    <div class="rec-conf">Confidence: <strong>${(rec.confidence * 100).toFixed(0)}%</strong></div>
+    <div class="rec-signals">
+      <div class="rec-signal-group bullish">
+        <div class="label">Bullish Signals</div>
+        <div class="value">${rec.bullish_signals || 0}</div>
+      </div>
+      <div class="rec-signal-group bearish">
+        <div class="label">Bearish Signals</div>
+        <div class="value">${rec.bearish_signals || 0}</div>
+      </div>
+    </div>
+    <div class="rec-reasoning"><strong>Rationale:</strong> ${rec.reasoning}</div>
+  </div>`;
+  }
+
+  html += `
   <div class="horizons">
     ${['horizon_1d','horizon_3d','horizon_7d'].map((k,i) => {
       const h = pred[k] || {};

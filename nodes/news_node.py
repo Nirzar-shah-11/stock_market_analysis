@@ -27,7 +27,7 @@ def news_node(state: PredictionState) -> dict:
             company_name=company_name,
             symbol=symbol,
             max_articles=8,
-            days_back=7,
+            days_back=15,
         )
         _log(f"✓ {len(articles)} articles with summaries", success=True)
         return {"news_articles": articles}

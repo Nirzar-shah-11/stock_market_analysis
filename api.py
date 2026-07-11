@@ -30,6 +30,67 @@ class PredictRequest(BaseModel):
     symbol:  str
 
 
+def generate_recommendation(prediction: dict) -> dict:
+    """Generate buy/sell/hold recommendation based on prediction data."""
+    if not prediction:
+        return {"action": "HOLD", "confidence": 0, "reasoning": "Insufficient data"}
+    
+    overall_bias = prediction.get("overall_bias", "Neutral")
+    horizon_1d = prediction.get("horizon_1d", {})
+    horizon_3d = prediction.get("horizon_3d", {})
+    horizon_7d = prediction.get("horizon_7d", {})
+    risks = prediction.get("risks", [])
+    signal_trace = prediction.get("signal_trace", [])
+    
+    # Calculate average confidence
+    confidences = [
+        horizon_1d.get("confidence", 0),
+        horizon_3d.get("confidence", 0),
+        horizon_7d.get("confidence", 0),
+    ]
+    avg_confidence = sum(confidences) / len([c for c in confidences if c > 0]) if any(confidences) else 0
+    
+    # Count bullish/bearish signals
+    bullish_count = sum(1 for s in signal_trace if s.get("direction") == "Bullish")
+    bearish_count = sum(1 for s in signal_trace if s.get("direction") == "Bearish")
+    total_signals = len(signal_trace) or 1
+    bullish_ratio = bullish_count / total_signals
+    
+    # Determine action
+    action = "HOLD"
+    reasoning = ""
+    
+    if overall_bias == "Bullish" and avg_confidence > 0.6 and bullish_ratio > 0.6:
+        action = "BUY"
+        reasoning = f"Strong bullish bias ({overall_bias}) with {bullish_count}/{total_signals} bullish signals (conf: {avg_confidence:.0%})"
+    elif overall_bias == "Bearish" and avg_confidence > 0.6 and bullish_ratio < 0.4:
+        action = "SELL"
+        reasoning = f"Strong bearish bias ({overall_bias}) with {bearish_count}/{total_signals} bearish signals (conf: {avg_confidence:.0%})"
+    elif overall_bias == "Bullish":
+        action = "BUY"
+        reasoning = f"Bullish bias ({overall_bias}) detected (conf: {avg_confidence:.0%})"
+    elif overall_bias == "Bearish":
+        action = "SELL"
+        reasoning = f"Bearish bias ({overall_bias}) detected (conf: {avg_confidence:.0%})"
+    else:
+        action = "HOLD"
+        reasoning = f"Mixed/Neutral signals ({overall_bias}), awaiting clearer direction"
+    
+    # Adjust for high-risk scenarios
+    if risks and len(risks) > 1:
+        action = "HOLD"
+        reasoning += f". Multiple risks identified: {', '.join(risks[:2])}"
+    
+    return {
+        "action": action,
+        "confidence": round(avg_confidence / 100, 2),  # Normalize to 0-1 for frontend
+        "bullish_signals": bullish_count,
+        "bearish_signals": bearish_count,
+        "reasoning": reasoning,
+        "risks": risks,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     with open("templates/index.html") as f:
@@ -43,6 +104,8 @@ async def predict(req: PredictRequest):
         final = graph.invoke(state)
         pred  = final.get("prediction", {})
         errors = final.get("errors", [])
+        
+        recommendation = generate_recommendation(pred)
 
         return {
             "symbol":         req.symbol.upper(),
@@ -59,6 +122,7 @@ async def predict(req: PredictRequest):
             },
             "news_articles": final.get("news_articles", []),
             "prediction":    pred,
+            "recommendation": recommendation,
             "errors":        errors,
         }
     except Exception as e:
