@@ -1,8 +1,8 @@
-# 📈 NSE Stock Market Predictor
+# Stock Market Predictor
 
 A multi-agent stock price prediction system for NSE (National Stock Exchange) India that leverages **LangGraph**, **Llama 3 LLM**, technical analysis, options data, and historical pattern matching to generate buy/sell/hold recommendations.
 
-## 🎯 Overview
+## Overview
 
 This project combines multiple data sources and analytical methods to predict short-term (1d/3d/7d) stock price movements:
 
@@ -14,7 +14,7 @@ This project combines multiple data sources and analytical methods to predict sh
 - **LLM Synthesis** — Llama 3 synthesizes all signals into a unified prediction
 - **Recommendation** — Final BUY/SELL/HOLD action with confidence score
 
-## 🏗️ Architecture
+## Architecture
 
 ### FastAPI Server (`api.py`)
 - **POST `/predict`** — Takes company name + NSE symbol, returns full prediction
@@ -195,7 +195,7 @@ curl -X POST http://localhost:8000/predict \
 3. Click "Predict"
 4. View results with recommendation prominently displayed
 
-## 🧠 How It Works
+## How It Works
 
 ### Data Collection Pipeline
 1. **Price Data** — Last 60 days OHLCV from data source (jugaad-data)
@@ -225,7 +225,7 @@ Predict 1d, 3d, 7d direction and magnitude. Explain your reasoning.
 - **SELL**: Bearish bias + high confidence + >60% bearish signal ratio
 - **HOLD**: Mixed/Neutral signals OR multiple risks identified
 
-## 📦 Dependencies
+## Dependencies
 
 Key packages (see `requirements.txt`):
 - `fastapi` — Web framework
@@ -235,7 +235,7 @@ Key packages (see `requirements.txt`):
 - `jugaad_data` — NSE data fetching
 - `beautifulsoup4` — Web scraping for news
 
-## 🔧 Configuration
+## Configuration
 
 Edit `api.py` or `.env` to customize:
 - LLM model (local Ollama or cloud API)
@@ -244,7 +244,7 @@ Edit `api.py` or `.env` to customize:
 - Correlation peer selection
 - Pattern matching window
 
-## 📈 Sample Predictions
+## Sample Predictions
 
 ### Example 1: RELIANCE (May 7, 2026)
 - **Bias**: Bullish
@@ -260,7 +260,7 @@ Edit `api.py` or `.env` to customize:
 - **Drivers**: Bearish divergence, OI distribution suggests weakness
 - **Risks**: Support at MA200, potential reversal
 
-## ⚠️ Warnings & Disclaimers
+## Warnings & Disclaimers
 
 - **Not financial advice** — Use as research tool only
 - **Market volatility** — Predictions are probabilistic, not guaranteed
@@ -268,7 +268,7 @@ Edit `api.py` or `.env` to customize:
 - **Model limitations** — Llama 3 has knowledge cutoff; recent events may affect accuracy
 - **Testing required** — Backtest strategies before live trading
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -277,7 +277,7 @@ Edit `api.py` or `.env` to customize:
 | "Symbol not found" | Verify NSE symbol (e.g., RELIANCE not REL) |
 | Empty signals | Check data source availability during market hours |
 
-## 📚 Project Files
+## Project Files
 
 ```
 stock_market_analysis/
@@ -302,7 +302,7 @@ stock_market_analysis/
 └── README.md              # This file
 ```
 
-## 🚀 Future Enhancements
+## Future Enhancements
 
 - [ ] Backtesting engine with historical accuracy metrics
 - [ ] Portfolio-level predictions (not just single stocks)
@@ -312,7 +312,7 @@ stock_market_analysis/
 - [ ] Real-time signal updates (WebSocket)
 - [ ] Export predictions to CSV/database
 
-## 📞 Support
+## Support
 
 For issues or questions:
 1. Check logs in terminal
@@ -322,6 +322,6 @@ For issues or questions:
 
 ---
 
-**Last Updated**: May 7, 2026  
-**Version**: 1.0  
+**Last Updated**: July 7, 2026  
+**Version**: 1.1  
 **Author**: Stock Market Analysis Team
