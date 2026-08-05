@@ -151,6 +151,9 @@
   /* ── Error ── */
   .error-box { background: rgba(248,81,73,.1); border: 1px solid var(--red);
                border-radius: 8px; padding: 1rem; color: var(--red); margin-bottom: 1rem; display: none; }
+  .link-list { display: flex; flex-direction: column; gap: 0.55rem; }
+  .link-list a { color: var(--blue); text-decoration: none; }
+  .link-list a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -196,14 +199,14 @@
 
 <script>
 const STEPS = [
-  "Checking F&O availability…",
-  "Fetching today's price & 60-day history…",
-  "Computing 10 technical signals…",
-  "Fetching live options chain (OI)…",
-  "Scanning bulk deals, insider trades, FII/DII, filings…",
-  "Running correlation analysis on peer stocks…",
-  "Matching historical signal patterns…",
-  "Llama 3.3 70B generating full prediction…",
+  "Checking the latest market data…",
+  "Looking at recent price moves…",
+  "Reading the main market signals…",
+  "Checking what traders are doing…",
+  "Scanning recent company news…",
+  "Comparing this stock with similar companies…",
+  "Looking for similar past patterns…",
+  "Preparing a plain-English forecast…",
 ];
 
 let stepIdx = 0, stepTimer = null;
@@ -253,12 +256,40 @@ async function runPrediction() {
   document.getElementById('btn-predict').disabled = false;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildSimpleSummary(pred, rec) {
+  const bias = (pred.overall_bias || 'Neutral').toLowerCase();
+  const horizon = pred.horizon_1d || {};
+  const direction = (horizon.direction || 'Sideways').toLowerCase();
+
+  if (rec.reasoning) {
+    return rec.reasoning;
+  }
+
+  if (direction === 'up') {
+    return bias === 'bearish' ? 'The signs look a bit better than before, so a rise looks possible.' : 'The signs look positive, so this stock may rise in the short term.';
+  }
+  if (direction === 'down') {
+    return 'The signs look weak right now, so this stock may fall in the short term.';
+  }
+  return 'The signals are mixed right now, so the stock may stay around the same level for a while.';
+}
+
 function renderResult(data) {
   const pred  = data.prediction || {};
   const rec   = data.recommendation || {};
   const price = data.today_price || {};
   const counts = data.signal_counts || {};
   const bias  = pred.overall_bias || 'Neutral';
+  const simpleSummary = buildSimpleSummary(pred, rec);
 
   const pct = parseFloat(price.pct_change || 0);
   const pctClass = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
@@ -279,6 +310,7 @@ function renderResult(data) {
 
   <div class="counts">
     <div class="count-chip">Technical <span>${counts.technical || 0}</span></div>
+    <div class="count-chip">News <span>${counts.news || 0}</span></div>
     <div class="count-chip">OI <span>${counts.oi || 0}</span></div>
     <div class="count-chip">Hints <span>${counts.hints || 0}</span></div>
     <div class="count-chip">Correlation <span>${counts.correlation || 0}</span></div>
@@ -293,15 +325,15 @@ function renderResult(data) {
     <div class="rec-conf">Confidence: <strong>${(rec.confidence * 100).toFixed(0)}%</strong></div>
     <div class="rec-signals">
       <div class="rec-signal-group bullish">
-        <div class="label">Bullish Signals</div>
+        <div class="label">Positive signs</div>
         <div class="value">${rec.bullish_signals || 0}</div>
       </div>
       <div class="rec-signal-group bearish">
-        <div class="label">Bearish Signals</div>
+        <div class="label">Negative signs</div>
         <div class="value">${rec.bearish_signals || 0}</div>
       </div>
     </div>
-    <div class="rec-reasoning"><strong>Rationale:</strong> ${rec.reasoning}</div>
+    <div class="rec-reasoning"><strong>Plain English:</strong> ${escapeHtml(simpleSummary)}</div>
   </div>`;
   }
 
@@ -331,18 +363,18 @@ function renderResult(data) {
   const risks   = pred.risks || [];
   if (drivers.length || risks.length) {
     html += `<div class="section">
-      <h3>Key Drivers & Risks</h3>
-      ${drivers.length ? `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">DRIVERS</div>
-        <div class="tag-list">${drivers.map(d=>`<div class="tag" style="color:var(--green)">▲ ${d}</div>`).join('')}</div></div>` : ''}
-      ${risks.length ? `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">RISKS</div>
-        <div class="tag-list">${risks.map(r=>`<div class="tag" style="color:var(--red)">⚠ ${r}</div>`).join('')}</div></div>` : ''}
+      <h3>What is helping or hurting</h3>
+      ${drivers.length ? `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">GOOD SIGNS</div>
+        <div class="tag-list">${drivers.map(d=>`<div class="tag" style="color:var(--green)">▲ ${escapeHtml(d)}</div>`).join('')}</div></div>` : ''}
+      ${risks.length ? `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">MAIN RISKS</div>
+        <div class="tag-list">${risks.map(r=>`<div class="tag" style="color:var(--red)">⚠ ${escapeHtml(r)}</div>`).join('')}</div></div>` : ''}
     </div>`;
   }
 
   // Signal trace
   const trace = pred.signal_trace || [];
   if (trace.length) {
-    html += `<div class="section"><h3>Full Signal Trace</h3>`;
+    html += `<div class="section"><h3>What is driving this view</h3>`;
     for (const s of trace) {
       html += `
       <div class="sig-row">
@@ -359,7 +391,7 @@ function renderResult(data) {
 
   // Pattern + correlation summaries
   if (pred.pattern_match_summary || pred.correlation_summary) {
-    html += `<div class="section"><h3>Context</h3>`;
+    html += `<div class="section"><h3>Simple context</h3>`;
     if (pred.pattern_match_summary)
       html += `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">HISTORICAL PATTERNS</div>
                <div style="font-size:.88rem;line-height:1.6">${pred.pattern_match_summary}</div></div>`;
@@ -367,6 +399,21 @@ function renderResult(data) {
       html += `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">PEER CORRELATION</div>
                <div style="font-size:.88rem;line-height:1.6">${pred.correlation_summary}</div></div>`;
     html += `</div>`;
+  }
+
+  const articles = data.news_articles || [];
+  if (articles.length) {
+    html += `<div class="section"><h3>News links</h3><div class="link-list">${articles.map((art) => {
+      const url = art.url || '';
+      const label = escapeHtml(art.source || art.url || 'Source');
+      const title = escapeHtml(art.title || '');
+      const published = escapeHtml(art.date_display || art.date || '');
+      return `<div>
+        <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>
+        ${title ? `<div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">${title}</div>` : ''}
+        ${published ? `<div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">Published: ${published}</div>` : ''}
+      </div>`;
+    }).join('')}</div></div>`;
   }
 
   // Errors
