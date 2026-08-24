@@ -34,3 +34,4 @@ bin/
 *.pyd
 *.swp
 *.swo
+app/history.json
