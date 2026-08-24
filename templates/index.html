@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Predictor — NSE India</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --blue:     #58a6ff;
+    --purple:   #bc8cff;
+    --accent:   #1f6feb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { font-size: 1.2rem; font-weight: 600; color: var(--blue); }
+  header span { color: var(--muted); font-size: 0.85rem; }
+
+  /* ── Layout ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Search form ── */
+  .search-card { background: var(--surface); border: 1px solid var(--border);
+                 border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+  .search-card h2 { font-size: 1rem; color: var(--muted); margin-bottom: 1rem; }
+  .search-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .search-row input { background: var(--bg); border: 1px solid var(--border);
+                      color: var(--text); border-radius: 8px; padding: 0.6rem 1rem;
+                      font-size: 0.95rem; flex: 1; min-width: 160px; }
+  .search-row input:focus { outline: none; border-color: var(--accent); }
+  .search-row button { background: var(--accent); color: #fff; border: none;
+                       border-radius: 8px; padding: 0.6rem 1.5rem; font-size: 0.95rem;
+                       cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .search-row button:hover { background: #388bfd; }
+  .search-row button:disabled { background: var(--border); cursor: not-allowed; }
+
+  /* ── Quick symbols ── */
+  .quick { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .chip { background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+          border-radius: 20px; padding: 0.25rem 0.75rem; font-size: 0.8rem;
+          cursor: pointer; transition: all .15s; }
+  .chip:hover { border-color: var(--blue); color: var(--blue); }
+
+  /* ── Status ── */
+  #status { text-align: center; padding: 2rem; color: var(--muted); display: none; }
+  .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border);
+             border-top-color: var(--blue); border-radius: 50%;
+             animation: spin .8s linear infinite; margin-bottom: 1rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Result sections ── */
+  #result { display: none; }
+
+  .price-banner { background: var(--surface); border: 1px solid var(--border);
+                  border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .price-banner .sym { font-size: 1.4rem; font-weight: 700; }
+  .price-banner .price { font-size: 2rem; font-weight: 700; }
+  .price-banner .chg { font-size: 1rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; }
+  .chg.up   { background: rgba(63,185,80,.15); color: var(--green); }
+  .chg.down { background: rgba(248,81,73,.15);  color: var(--red);   }
+  .chg.flat { background: rgba(139,148,158,.15);color: var(--muted); }
+
+  /* ── Bias badge ── */
+  .bias { display: inline-flex; align-items: center; gap: 0.4rem;
+          padding: 0.3rem 0.9rem; border-radius: 20px; font-weight: 700; font-size: 0.95rem; }
+  .bias.Bullish { background: rgba(63,185,80,.15); color: var(--green); }
+  .bias.Bearish { background: rgba(248,81,73,.15);  color: var(--red);   }
+  .bias.Neutral { background: rgba(139,148,158,.15);color: var(--muted); }
+  .bias.Mixed   { background: rgba(210,153,34,.15); color: var(--yellow);}
+
+  /* ── Horizon cards ── */
+  .horizons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  @media(max-width:700px) { .horizons { grid-template-columns: 1fr; } }
+  .h-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1.25rem; }
+  .h-card .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .h-card .dir   { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .h-card .mag   { font-size: 0.95rem; color: var(--muted); margin-bottom: 0.75rem; }
+  .conf-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 0.5rem; }
+  .conf-fill { height: 100%; border-radius: 3px; background: var(--blue); }
+  .h-card .reasoning { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+  .dir.Up   { color: var(--green); }
+  .dir.Down { color: var(--red);   }
+  .dir.Sideways { color: var(--yellow); }
+
+  /* ── Sections ── */
+  .section { background: var(--surface); border: 1px solid var(--border);
+             border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .section h3 { font-size: 0.9rem; color: var(--blue); text-transform: uppercase;
+                letter-spacing: .05em; margin-bottom: 1rem; }
+
+  /* ── Signal trace ── */
+  .sig-row { display: flex; gap: 0.75rem; align-items: flex-start;
+             padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .sig-row:last-child { border-bottom: none; }
+  .sig-weight { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.4rem;
+                border-radius: 4px; white-space: nowrap; min-width: 48px; text-align: center; }
+  .sig-weight.High   { background: rgba(248,81,73,.2);  color: var(--red);    }
+  .sig-weight.Medium { background: rgba(210,153,34,.2); color: var(--yellow); }
+  .sig-weight.Low    { background: rgba(139,148,158,.2);color: var(--muted);  }
+  .sig-dir { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.4rem;
+             border-radius: 4px; white-space: nowrap; min-width: 52px; text-align: center; }
+  .sig-dir.Bullish { background: rgba(63,185,80,.15); color: var(--green); }
+  .sig-dir.Bearish { background: rgba(248,81,73,.15); color: var(--red);   }
+  .sig-dir.Neutral { background: rgba(139,148,158,.15);color: var(--muted);}
+  .sig-body { flex: 1; }
+  .sig-name { font-size: 0.88rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .sig-interp { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+
+  /* ── Drivers / Risks ── */
+  .tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .tag { background: var(--bg); border: 1px solid var(--border);
+         border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.82rem; }
+
+  /* ── Recommendation ── */
+  .recommendation { background: var(--surface); border: 2px solid var(--border);
+                    border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .rec-action { font-size: 2rem; font-weight: 900; margin-bottom: 0.5rem; letter-spacing: .05em; }
+  .rec-action.BUY   { color: var(--green); }
+  .rec-action.SELL  { color: var(--red); }
+  .rec-action.HOLD  { color: var(--yellow); }
+  .rec-conf { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
+  .rec-signals { display: flex; gap: 1.5rem; margin-bottom: 0.75rem; }
+  .rec-signal-group { }
+  .rec-signal-group .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .rec-signal-group .value { font-size: 1.3rem; font-weight: 700; }
+  .rec-signal-group.bullish .value { color: var(--green); }
+  .rec-signal-group.bearish .value { color: var(--red); }
+  .rec-reasoning { font-size: 0.9rem; line-height: 1.6; margin-top: 1rem; padding-top: 1rem;
+                   border-top: 1px solid var(--border); }
+
+  /* ── Signal counts ── */
+  .counts { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .count-chip { background: var(--surface); border: 1px solid var(--border);
+                border-radius: 8px; padding: 0.4rem 0.85rem; font-size: 0.82rem;
+                color: var(--muted); }
+  .count-chip span { color: var(--text); font-weight: 700; }
+
+  /* ── Error ── */
+  .error-box { background: rgba(248,81,73,.1); border: 1px solid var(--red);
+               border-radius: 8px; padding: 1rem; color: var(--red); margin-bottom: 1rem; display: none; }
+  .link-list { display: flex; flex-direction: column; gap: 0.55rem; }
+  .link-list a { color: var(--blue); text-decoration: none; }
+  .link-list a:hover { text-decoration: underline; }
+  .article-list { display: grid; gap: 0.85rem; }
+  .article-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .article-head { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+  .article-title { font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
+  .article-meta { font-size: 0.76rem; color: var(--muted); }
+  .article-snippet { font-size: 0.84rem; color: var(--text); line-height: 1.6; margin-top: 0.65rem; }
+  .article-bullets { margin-top: 0.75rem; padding-left: 1.15rem; color: var(--muted); }
+  .article-bullets li { margin-top: 0.35rem; }
+  .history-section { margin-top: 1rem; }
+  .history-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .history-head button { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.45rem 0.8rem; cursor: pointer; }
+  .history-head button:hover { border-color: var(--blue); color: var(--blue); }
+  .history-list { display: grid; gap: 0.6rem; }
+  .history-item { width: 100%; text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; cursor: pointer; color: var(--text); }
+  .history-item:hover { border-color: var(--blue); }
+  .history-row { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+  .history-symbol { font-weight: 700; }
+  .history-meta { color: var(--muted); font-size: 0.8rem; }
+  .history-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+  .history-empty { color: var(--muted); font-size: 0.88rem; }
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+         padding: 0.75rem 1rem; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  .tab:hover, .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📈 NSE Stock Predictor</h1>
+  <span>LangGraph · Llama 3: 8B · Technical + OI + Hints + Correlation + Patterns</span>
+</header>
+
+<main>
+  <nav class="tabs" aria-label="Main views">
+    <button type="button" class="tab active" data-tab="analyze" onclick="switchTab('analyze')">Analyze</button>
+    <button type="button" class="tab" data-tab="history" onclick="switchTab('history')">Check History</button>
+  </nav>
+
+  <section id="tab-analyze" class="tab-panel active">
+  <div class="search-card">
+    <h2>Enter a company to predict</h2>
+    <div class="search-row">
+      <input id="inp-company" placeholder="Company name  e.g. Suzlon Energy" />
+      <input id="inp-symbol"  placeholder="NSE symbol  e.g. SUZLON" style="max-width:200px"/>
+      <button id="btn-predict" onclick="runPrediction()">Predict</button>
+    </div>
+    <div class="quick">
+      <span style="color:var(--muted);font-size:.8rem;align-self:center">Quick:</span>
+      <div class="chip" onclick="quick('Suzlon Energy','SUZLON')">SUZLON</div>
+      <div class="chip" onclick="quick('Infosys','INFY')">INFY</div>
+      <div class="chip" onclick="quick('HDFC Bank','HDFCBANK')">HDFCBANK</div>
+      <div class="chip" onclick="quick('Reliance Industries','RELIANCE')">RELIANCE</div>
+      <div class="chip" onclick="quick('Tata Motors','TATAMOTORS')">TATAMOTORS</div>
+      <div class="chip" onclick="quick('ICICI Bank','ICICIBANK')">ICICIBANK</div>
+      <div class="chip" onclick="quick('Zomato','ZOMATO')">ZOMATO</div>
+      <div class="chip" onclick="quick('Tata Power','TATAPOWER')">TATAPOWER</div>
+    </div>
+  </div>
+
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Loading -->
+  <div id="status">
+    <div class="spinner"></div>
+    <div id="status-msg">Initialising agents…</div>
+  </div>
+
+  <!-- Result -->
+  <div id="result"></div>
+  </section>
+
+  <section id="tab-history" class="tab-panel">
+  <div class="section history-section">
+    <div class="history-head">
+      <h3 style="margin-bottom:0">Past runs and predictions</h3>
+      <button type="button" onclick="loadHistory()">Refresh</button>
+    </div>
+    <div id="history-list" class="history-list">
+      <div class="history-empty">No analyses saved yet.</div>
+    </div>
+  </div>
+  </section>
+</main>
+
+<script>
+const STEPS = [
+  "Checking the latest market data…",
+  "Looking at recent price moves…",
+  "Reading the main market signals…",
+  "Checking what traders are doing…",
+  "Scanning recent company news…",
+  "Comparing this stock with similar companies…",
+  "Looking for similar past patterns…",
+  "Preparing a plain-English forecast…",
+];
+
+let stepIdx = 0, stepTimer = null;
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `tab-${tabName}`);
+  });
+  if (tabName === 'history') loadHistory();
+}
+
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '<div class="history-empty">Loading recent analyses…</div>';
+
+  try {
+    const res = await fetch('/history?limit=10');
+    if (!res.ok) throw new Error('Could not load history');
+    const entries = await res.json();
+
+    if (!entries.length) {
+      list.innerHTML = '<div class="history-empty">No analyses saved yet.</div>';
+      return;
+    }
+
+    list.innerHTML = entries.map((entry) => {
+      const symbol = escapeHtml(entry.symbol || '');
+      const company = escapeHtml(entry.company || '');
+      const runTimestamp = escapeHtml((entry.run_timestamp || '').slice(0, 16));
+      const action = escapeHtml(entry.action || 'HOLD');
+      const bias = escapeHtml(entry.bias || 'Neutral');
+      const confidence = Number(entry.confidence || 0);
+      return `
+        <button type="button" class="history-item" onclick="restoreHistory(this.dataset.company, this.dataset.symbol)" data-company="${company}" data-symbol="${symbol}">
+          <div class="history-row">
+            <div class="history-symbol">${symbol} <span style="color:var(--muted);font-weight:400">${company ? '· ' + company : ''}</span></div>
+            <div class="history-meta">${runTimestamp}</div>
+          </div>
+          <div class="history-tags">
+            <span>Action: ${action}</span>
+            <span>Bias: ${bias}</span>
+            <span>Confidence: ${(confidence * 100).toFixed(0)}%</span>
+          </div>
+        </button>`;
+    }).join('');
+  } catch (error) {
+    list.innerHTML = '<div class="history-empty">History could not be loaded right now.</div>';
+  }
+}
+
+function restoreHistory(company, symbol) {
+  document.getElementById('inp-company').value = company || '';
+  document.getElementById('inp-symbol').value = symbol || '';
+  switchTab('analyze');
+}
+
+function quick(company, symbol) {
+  document.getElementById('inp-company').value = company;
+  document.getElementById('inp-symbol').value  = symbol;
+}
+
+async function runPrediction() {
+  const company = document.getElementById('inp-company').value.trim();
+  const symbol  = document.getElementById('inp-symbol').value.trim().toUpperCase();
+  if (!company || !symbol) { alert('Please enter both company name and symbol'); return; }
+
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('result').style.display    = 'none';
+  document.getElementById('status').style.display    = 'block';
+  document.getElementById('btn-predict').disabled    = true;
+
+  stepIdx = 0;
+  document.getElementById('status-msg').textContent = STEPS[0];
+  stepTimer = setInterval(() => {
+    stepIdx = (stepIdx + 1) % STEPS.length;
+    document.getElementById('status-msg').textContent = STEPS[stepIdx];
+  }, 4000);
+
+  try {
+    const res  = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({company, symbol}),
+    });
+    const data = await res.json();
+    clearInterval(stepTimer);
+
+    if (!res.ok) throw new Error(data.detail || 'API error');
+
+    document.getElementById('status').style.display = 'none';
+    renderResult(data);
+    loadHistory();
+  } catch (e) {
+    clearInterval(stepTimer);
+    document.getElementById('status').style.display    = 'none';
+    document.getElementById('error-box').style.display = 'block';
+    document.getElementById('error-box').textContent   = '✗ ' + e.message;
+  }
+
+  document.getElementById('btn-predict').disabled = false;
+}
+
+loadHistory();
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildSimpleSummary(pred, rec) {
+  const bias = (pred.overall_bias || 'Neutral').toLowerCase();
+  const horizon = pred.horizon_1d || {};
+  const direction = (horizon.direction || 'Sideways').toLowerCase();
+
+  if (rec.reasoning) {
+    return rec.reasoning;
+  }
+
+  if (direction === 'up') {
+    return bias === 'bearish' ? 'The signs look a bit better than before, so a rise looks possible.' : 'The signs look positive, so this stock may rise in the short term.';
+  }
+  if (direction === 'down') {
+    return 'The signs look weak right now, so this stock may fall in the short term.';
+  }
+  return 'The signals are mixed right now, so the stock may stay around the same level for a while.';
+}
+
+function renderResult(data) {
+  const pred  = data.prediction || {};
+  const rec   = data.recommendation || {};
+  const price = data.today_price || {};
+  const counts = data.signal_counts || {};
+  const bias  = pred.overall_bias || 'Neutral';
+  const simpleSummary = buildSimpleSummary(pred, rec);
+
+  const pct = parseFloat(price.pct_change || 0);
+  const pctClass = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+  const pctStr   = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+
+  let html = `
+  <div class="price-banner">
+    <div>
+      <div class="sym">${data.symbol} <span style="color:var(--muted);font-weight:400;font-size:1rem">· ${data.company}</span></div>
+      <div style="color:var(--muted);font-size:.8rem;margin-top:.2rem">${(data.run_timestamp||'').slice(0,16)}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div class="price">₹${price.close || 'N/A'}</div>
+      <div class="chg ${pctClass}">${pctStr}</div>
+      <div class="bias ${bias}">${bias === 'Bullish' ? '▲' : bias === 'Bearish' ? '▼' : '◆'} ${bias}</div>
+    </div>
+  </div>
+
+  <div class="counts">
+    <div class="count-chip">Technical <span>${counts.technical || 0}</span></div>
+    <div class="count-chip">News <span>${counts.news || 0}</span></div>
+    <div class="count-chip">OI <span>${counts.oi || 0}</span></div>
+    <div class="count-chip">Hints <span>${counts.hints || 0}</span></div>
+    <div class="count-chip">Correlation <span>${counts.correlation || 0}</span></div>
+    <div class="count-chip">Patterns matched <span>${counts.patterns || 0}</span></div>
+  </div>`;
+
+  // Recommendation section
+  if (rec.action) {
+    html += `
+  <div class="recommendation">
+    <div class="rec-action ${rec.action}">${rec.action}</div>
+    <div class="rec-conf">Confidence: <strong>${(rec.confidence * 100).toFixed(0)}%</strong></div>
+    <div class="rec-signals">
+      <div class="rec-signal-group bullish">
+        <div class="label">Positive signs</div>
+        <div class="value">${rec.bullish_signals || 0}</div>
+      </div>
+      <div class="rec-signal-group bearish">
+        <div class="label">Negative signs</div>
+        <div class="value">${rec.bearish_signals || 0}</div>
+      </div>
+    </div>
+    <div class="rec-reasoning"><strong>Plain English:</strong> ${escapeHtml(simpleSummary)}</div>
+  </div>`;
+  }
+
+  html += `
+  <div class="horizons">
+    ${['horizon_1d','horizon_3d','horizon_7d'].map((k,i) => {
+      const h = pred[k] || {};
+      const labels = ['1 Day','3 Days','7 Days'];
+      const dir  = h.direction || 'Sideways';
+      const mag  = h.magnitude_pct || 0;
+      const conf = h.confidence   || 0;
+      const reason = h.reasoning  || '';
+      return `
+      <div class="h-card">
+        <div class="label">${labels[i]}</div>
+        <div class="dir ${dir}">${dir === 'Up' ? '▲ ' : dir === 'Down' ? '▼ ' : '◆ '}${dir}</div>
+        <div class="mag">~${Math.abs(mag).toFixed(1)}%</div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${conf}%"></div></div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Confidence: ${conf}%</div>
+        <div class="reasoning">${reason}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  // Key drivers + risks
+  const drivers = pred.key_drivers || [];
+  const risks   = pred.risks || [];
+  if (drivers.length || risks.length) {
+    html += `<div class="section">
+      <h3>What is helping or hurting</h3>
+      ${drivers.length ? `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">GOOD SIGNS</div>
+        <div class="tag-list">${drivers.map(d=>`<div class="tag" style="color:var(--green)">▲ ${escapeHtml(d)}</div>`).join('')}</div></div>` : ''}
+      ${risks.length ? `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">MAIN RISKS</div>
+        <div class="tag-list">${risks.map(r=>`<div class="tag" style="color:var(--red)">⚠ ${escapeHtml(r)}</div>`).join('')}</div></div>` : ''}
+    </div>`;
+  }
+
+  // Signal trace
+  const trace = pred.signal_trace || [];
+  if (trace.length) {
+    html += `<div class="section"><h3>What is driving this view</h3>`;
+    for (const s of trace) {
+      html += `
+      <div class="sig-row">
+        <div class="sig-weight ${s.weight||'Low'}">${s.weight||'Low'}</div>
+        <div class="sig-dir ${s.direction||'Neutral'}">${s.direction||'Neutral'}</div>
+        <div class="sig-body">
+          <div class="sig-name">${s.signal||''}</div>
+          <div class="sig-interp">${s.interpretation||''}</div>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Pattern + correlation summaries
+  if (pred.pattern_match_summary || pred.correlation_summary) {
+    html += `<div class="section"><h3>Simple context</h3>`;
+    if (pred.pattern_match_summary)
+      html += `<div style="margin-bottom:.75rem"><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">HISTORICAL PATTERNS</div>
+               <div style="font-size:.88rem;line-height:1.6">${pred.pattern_match_summary}</div></div>`;
+    if (pred.correlation_summary)
+      html += `<div><div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">PEER CORRELATION</div>
+               <div style="font-size:.88rem;line-height:1.6">${pred.correlation_summary}</div></div>`;
+    html += `</div>`;
+  }
+
+  const articles = data.news_articles || [];
+  if (articles.length) {
+    html += `<div class="section"><h3>News articles</h3><div class="article-list">${articles.map((art) => {
+      const url = art.url || '';
+      const title = escapeHtml(art.title || 'Untitled article');
+      const source = escapeHtml(art.source || 'Unknown source');
+      const published = escapeHtml(art.date_display || art.date || '');
+      const snippet = escapeHtml(art.snippet || '');
+      const point1 = escapeHtml(art.point1 || '');
+      const point2 = escapeHtml(art.point2 || '');
+      return `<div class="article-card">
+        <div class="article-head">
+          <div>
+            <div class="article-title">${title}</div>
+            <div class="article-meta">${source}${published ? ` · ${published}` : ''}</div>
+          </div>
+          ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open article</a>` : ''}
+        </div>
+        ${snippet ? `<div class="article-snippet">${snippet}</div>` : ''}
+        ${(point1 || point2) ? `<ul class="article-bullets">
+          ${point1 ? `<li>${point1}</li>` : ''}
+          ${point2 ? `<li>${point2}</li>` : ''}
+        </ul>` : ''}
+      </div>`;
+    }).join('')}</div></div>`;
+  }
+
+  // Errors
+  if (data.errors && data.errors.length) {
+    html += `<div style="color:var(--muted);font-size:.8rem;margin-top:1rem">
+      ⚠ Warnings: ${data.errors.join(' · ')}</div>`;
+  }
+
+  const el = document.getElementById('result');
+  el.innerHTML = html;
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
