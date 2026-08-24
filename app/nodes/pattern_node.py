@@ -43,8 +43,7 @@ def pattern_node(state: PredictionState) -> dict:
     df["atr_ratio"]    = df["atr"] / df["atr"].rolling(20).mean()
 
     # Build today's signal fingerprint
-    today_fingerprint = _fingerprint(today_tech, today_hints)
-
+    today_fingerprint = _fingerprint(today_tech, today_hints, state.get("today_price", {}), df)
     similar = []
 
     # Scan all historical dates (except last 8 — need future data)
@@ -54,8 +53,11 @@ def pattern_node(state: PredictionState) -> dict:
 
         hist_fingerprint = _historical_fingerprint(row, past)
         similarity = _match_score(today_fingerprint, hist_fingerprint)
+        overlap = len(today_fingerprint & hist_fingerprint)
+        context_score = _context_similarity(state.get("today_price", {}), row, df)
+        effective_similarity = max(similarity, context_score)
 
-        if similarity < 0.35:   # at least 35% signal overlap
+        if effective_similarity < 0.25 and overlap < 1:
             continue
 
         # Compute outcomes
@@ -76,7 +78,7 @@ def pattern_node(state: PredictionState) -> dict:
 
         similar.append({
             "date":         str(row["Date"]),
-            "similarity":   round(similarity, 2),
+            "similarity":   round(effective_similarity, 2),
             "matching_signals": hist_fingerprint,
             "close_at_date": round(float(close_now), 2),
             "outcome_1d":   outcome_1d,
@@ -107,7 +109,7 @@ def pattern_node(state: PredictionState) -> dict:
 
 # ── Signal fingerprinting ─────────────────────────────────────────────────────
 
-def _fingerprint(tech_signals: list, hint_signals: list) -> set:
+def _fingerprint(tech_signals: list, hint_signals: list, today_price: dict | None = None, history_df: pd.DataFrame | None = None) -> set:
     """Converts today's signals into a set of labels for matching."""
     fp = set()
     for s in tech_signals:
@@ -124,6 +126,33 @@ def _fingerprint(tech_signals: list, hint_signals: list) -> set:
             fp.add(f"bulk_{bias}")
         elif "sector" in stype:
             fp.add(f"sector_{bias}")
+
+    if today_price:
+        pct_change = today_price.get("pct_change")
+        volume = today_price.get("volume")
+        if history_df is not None and not history_df.empty and volume is not None:
+            vol_avg20 = history_df["Volume"].tail(20).mean()
+            if pd.notna(vol_avg20) and vol_avg20:
+                vol_ratio = volume / vol_avg20
+            else:
+                vol_ratio = None
+        else:
+            vol_ratio = None
+
+        if pct_change is None and history_df is not None and len(history_df) >= 2:
+            prev_close = history_df["Close"].iloc[-2]
+            last_close = history_df["Close"].iloc[-1]
+            if pd.notna(prev_close) and prev_close:
+                pct_change = (last_close - prev_close) / prev_close
+
+        if pct_change is not None:
+            if pct_change > 0.005 and (vol_ratio is None or vol_ratio < 0.75):
+                fp.add("weak rally")
+            if pct_change < -0.005 and (vol_ratio is None or vol_ratio > 1.4):
+                fp.add("strong selling")
+            if vol_ratio is not None and abs(pct_change) < 0.01 and vol_ratio > 1.2:
+                fp.add("sideways distribution")
+
     return fp
 
 def _historical_fingerprint(row: pd.Series, past: pd.DataFrame) -> set:
@@ -160,7 +189,56 @@ def _historical_fingerprint(row: pd.Series, past: pd.DataFrame) -> set:
 def _match_score(a: set, b: set) -> float:
     if not a or not b:
         return 0.0
-    return len(a & b) / len(a | b)   # Jaccard similarity
+    overlap = len(a & b)
+    union = len(a | b)
+    if not union:
+        return 0.0
+    jaccard = overlap / union
+    if overlap >= 1:
+        return max(jaccard, overlap / 3.0)
+    return jaccard
+
+
+def _context_similarity(today_price: dict | None, row: pd.Series, history_df: pd.DataFrame) -> float:
+    if not today_price:
+        return 0.0
+
+    pct_change = today_price.get("pct_change")
+    volume = today_price.get("volume")
+    if pct_change is None and history_df is not None and len(history_df) >= 2:
+        prev_close = history_df["Close"].iloc[-2]
+        last_close = history_df["Close"].iloc[-1]
+        if pd.notna(prev_close) and prev_close:
+            pct_change = (last_close - prev_close) / prev_close
+
+    hist_pct = row.get("pct_change")
+    hist_vol_ratio = row.get("vol_ratio")
+
+    if pct_change is None or hist_pct is None:
+        return 0.0
+
+    score = 0.0
+    if (pct_change > 0 and hist_pct > 0) or (pct_change < 0 and hist_pct < 0):
+        score += 0.45
+    elif abs(pct_change) > 0.01 and abs(hist_pct) > 0.01:
+        score += 0.2
+
+    magnitude_gap = abs(abs(pct_change) - abs(hist_pct))
+    if magnitude_gap < 0.02:
+        score += 0.35
+    elif magnitude_gap < 0.05:
+        score += 0.2
+
+    if volume is not None and pd.notna(hist_vol_ratio) and pd.notna(volume):
+        if history_df is not None and not history_df.empty:
+            vol_avg20 = history_df["Volume"].tail(20).mean()
+            if pd.notna(vol_avg20) and vol_avg20:
+                vol_ratio = volume / vol_avg20
+                if pd.notna(vol_ratio) and pd.notna(hist_vol_ratio):
+                    if abs(vol_ratio - hist_vol_ratio) < 0.25:
+                        score += 0.2
+
+    return min(1.0, score)
 
 
 # ── Indicators ────────────────────────────────────────────────────────────────

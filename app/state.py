@@ -38,6 +38,7 @@ class PredictionState(TypedDict):
     today_tech:      list[dict]    # technical signals for today
     today_oi:        list[dict]    # OI signals for today
     today_hints:     list[dict]    # subtle hints for today
+    news_articles:   list[dict]    # recent company news
 
     # ── Historical pattern matching ───────────────────────────────────────────
     similar_patterns: list[dict]   # past dates with similar signal clusters
@@ -79,6 +80,7 @@ def fresh_state(company_name: str, symbol: str) -> PredictionState:
         today_tech=[],
         today_oi=[],
         today_hints=[],
+        news_articles=[],
         similar_patterns=[],
         correlation_signals=[],
         prediction={},

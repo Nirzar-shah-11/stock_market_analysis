@@ -4,26 +4,20 @@ api.py — FastAPI Server
 """
 
 import os
+import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pathlib import Path
+from datetime import datetime
+import numpy as np
 from state import fresh_state
 from graph import graph
 import warnings
 warnings.filterwarnings("ignore", message="no explicit representation of timezones")
-
-try:
-    import numpy as np
-except Exception:
-    np = None
-
-try:
-    import pandas as pd
-except Exception:
-    pd = None
 
 load_dotenv()
 
@@ -31,8 +25,14 @@ app = FastAPI(title="Stock Predictor API", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
 
+APP_DIR = Path(__file__).resolve().parent
+HISTORY_FILE = APP_DIR / "history.json"
+HISTORY_LIMIT = 50
+
 # Serve static files (the web UI)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+STATIC_DIR = APP_DIR / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 class PredictRequest(BaseModel):
@@ -77,24 +77,24 @@ def generate_recommendation(prediction: dict) -> dict:
     net_direction = "BUY" if buy_confidence > sell_confidence else "SELL" if sell_confidence > buy_confidence else None
 
     action = "HOLD"
-    reasoning = f"Mixed/Neutral signals ({overall_bias}), awaiting clearer direction"
+    reasoning = "The signals are mixed right now, so it is better to wait for a clearer trend."
 
     if net_direction == "BUY" and buy_confidence >= 60:
         action = "BUY"
-        reasoning = f"Bullish horizon signals dominate (conf: {buy_confidence:.0f} / {buy_confidence + sell_confidence:.0f})"
+        reasoning = "The overall picture looks positive, and this stock seems more likely to rise in the short term."
     elif net_direction == "SELL" and sell_confidence >= 60:
         action = "SELL"
-        reasoning = f"Bearish horizon signals dominate (conf: {sell_confidence:.0f} / {buy_confidence + sell_confidence:.0f})"
+        reasoning = "The overall picture looks negative, and this stock seems more likely to fall in the short term."
     elif overall_bias == "Bullish" and avg_confidence >= 60 and bullish_count >= max(1, total_signals // 2):
         action = "BUY"
-        reasoning = f"Bullish bias ({overall_bias}) detected with {bullish_count}/{total_signals} bullish signals"
+        reasoning = "The signs are mostly positive, so a rise looks more likely than a drop."
     elif overall_bias == "Bearish" and avg_confidence >= 60 and bearish_count >= max(1, total_signals // 2):
         action = "SELL"
-        reasoning = f"Bearish bias ({overall_bias}) detected with {bearish_count}/{total_signals} bearish signals"
+        reasoning = "The signs are mostly negative, so a drop looks more likely than a rise."
 
     if risks and len(risks) > 1:
         action = "HOLD"
-        reasoning += f". Multiple risks identified: {', '.join(risks[:2])}"
+        reasoning = "There are several warning signs, so staying cautious is the safer choice."
 
     return {
         "action": action,
@@ -105,12 +105,7 @@ def generate_recommendation(prediction: dict) -> dict:
         "risks": risks,
     }
 
-
 def _json_safe(value):
-    if np is not None and isinstance(value, np.generic):
-        return value.item()
-    if pd is not None and isinstance(value, pd.Timestamp):
-        return value.isoformat()
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -119,12 +114,62 @@ def _json_safe(value):
         return [_json_safe(item) for item in value]
     if isinstance(value, set):
         return [_json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return [_json_safe(item) for item in value.tolist()]
+    if isinstance(value, np.generic):
+        return value.item()
     return value
+
+
+def _read_history() -> list[dict]:
+    if not HISTORY_FILE.exists():
+        return []
+
+    try:
+        with HISTORY_FILE.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+
+    return []
+
+
+def _write_history(entries: list[dict]) -> None:
+    with HISTORY_FILE.open("w", encoding="utf-8") as handle:
+        json.dump(entries[-HISTORY_LIMIT:], handle, indent=2, ensure_ascii=False)
+
+
+def _append_history(entry: dict) -> None:
+    history = _read_history()
+    history.append(entry)
+    _write_history(history)
+
+
+def _history_entry(response: dict) -> dict:
+    return {
+        "symbol": response.get("symbol", ""),
+        "company": response.get("company", ""),
+        "run_timestamp": response.get("run_timestamp", ""),
+        "action": response.get("recommendation", {}).get("action", "HOLD"),
+        "confidence": response.get("recommendation", {}).get("confidence", 0),
+        "bias": response.get("prediction", {}).get("overall_bias", "Neutral"),
+        "today_price": response.get("today_price", {}),
+        "signal_counts": response.get("signal_counts", {}),
+        "prediction": {
+            "overall_bias": response.get("prediction", {}).get("overall_bias", "Neutral"),
+            "horizon_1d": response.get("prediction", {}).get("horizon_1d", {}),
+            "horizon_3d": response.get("prediction", {}).get("horizon_3d", {}),
+            "horizon_7d": response.get("prediction", {}).get("horizon_7d", {}),
+        },
+        "errors": response.get("errors", []),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    with open("templates/index.html") as f:
+    with (APP_DIR / "templates" / "index.html").open(encoding="utf-8") as f:
         return f.read()
 
 
@@ -156,9 +201,20 @@ async def predict(req: PredictRequest):
             "recommendation": recommendation,
             "errors":        errors,
         }
-        return _json_safe(response)
+        safe_response = _json_safe(response)
+        _append_history(_history_entry(safe_response))
+        return safe_response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/history")
+async def history(limit: int = 20, symbol: str | None = None):
+    entries = list(reversed(_read_history()))
+    if symbol:
+        target = symbol.upper()
+        entries = [entry for entry in entries if entry.get("symbol", "").upper() == target]
+    return _json_safe(entries[: max(1, min(limit, HISTORY_LIMIT))])
 
 
 @app.get("/health")

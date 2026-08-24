@@ -81,12 +81,12 @@ Interactive web UI displaying:
 
 1. **Clone & Navigate**
    ```bash
-   cd stock_market_analysis
+  cd stock_market_analysis/app
    ```
 
 2. **Activate Virtual Environment**
    ```bash
-   source stockmarketanalysys/bin/activate
+  source ../stockmarketanalysys/bin/activate
    ```
 
 3. **Install Dependencies**
@@ -280,13 +280,14 @@ Edit `api.py` or `.env` to customize:
 ## Project Files
 
 ```
-stock_market_analysis/
-├── api.py                 # FastAPI server + recommendation logic
-├── graph.py               # LangGraph prediction workflow
-├── state.py               # Prediction state definition
-├── llm_client.py          # LLM integration
-├── news_client.py         # News fetcher
-├── nodes/                 # Analysis nodes
+ stock_market_analysis/
+ ├── app/                   # Application source and frontend
+ │   ├── api.py             # FastAPI server + recommendation logic
+ │   ├── graph.py           # LangGraph prediction workflow
+ │   ├── state.py           # Prediction state definition
+ │   ├── llm_client.py      # LLM integration
+ │   ├── news_client.py     # News fetcher
+ │   ├── nodes/             # Analysis nodes
 │   ├── price_node.py
 │   ├── technical_node.py
 │   ├── oi_node.py
@@ -295,10 +296,12 @@ stock_market_analysis/
 │   ├── pattern_node.py
 │   ├── prediction_node.py
 │   └── orchestrator_node.py
-├── templates/
-│   └── index.html         # Web UI
-├── static/                # CSS, JS assets
-├── requirements.txt       # Python dependencies
+ │   ├── templates/
+ │   │   └── index.html     # Web UI
+ │   ├── history.json       # Saved prediction runs
+ │   └── requirements.txt   # Python dependencies
+ ├── stockmarketanalysys/   # Python virtual environment
+ ├── start.sh               # Root launcher
 └── README.md              # This file
 ```
 

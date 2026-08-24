@@ -154,6 +154,32 @@
   .link-list { display: flex; flex-direction: column; gap: 0.55rem; }
   .link-list a { color: var(--blue); text-decoration: none; }
   .link-list a:hover { text-decoration: underline; }
+  .article-list { display: grid; gap: 0.85rem; }
+  .article-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .article-head { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+  .article-title { font-size: 0.95rem; font-weight: 700; line-height: 1.4; }
+  .article-meta { font-size: 0.76rem; color: var(--muted); }
+  .article-snippet { font-size: 0.84rem; color: var(--text); line-height: 1.6; margin-top: 0.65rem; }
+  .article-bullets { margin-top: 0.75rem; padding-left: 1.15rem; color: var(--muted); }
+  .article-bullets li { margin-top: 0.35rem; }
+  .history-section { margin-top: 1rem; }
+  .history-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .history-head button { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.45rem 0.8rem; cursor: pointer; }
+  .history-head button:hover { border-color: var(--blue); color: var(--blue); }
+  .history-list { display: grid; gap: 0.6rem; }
+  .history-item { width: 100%; text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; cursor: pointer; color: var(--text); }
+  .history-item:hover { border-color: var(--blue); }
+  .history-row { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+  .history-symbol { font-weight: 700; }
+  .history-meta { color: var(--muted); font-size: 0.8rem; }
+  .history-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+  .history-empty { color: var(--muted); font-size: 0.88rem; }
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+         padding: 0.75rem 1rem; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  .tab:hover, .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 </style>
 </head>
 <body>
@@ -164,7 +190,12 @@
 </header>
 
 <main>
-  <!-- Search -->
+  <nav class="tabs" aria-label="Main views">
+    <button type="button" class="tab active" data-tab="analyze" onclick="switchTab('analyze')">Analyze</button>
+    <button type="button" class="tab" data-tab="history" onclick="switchTab('history')">Check History</button>
+  </nav>
+
+  <section id="tab-analyze" class="tab-panel active">
   <div class="search-card">
     <h2>Enter a company to predict</h2>
     <div class="search-row">
@@ -195,6 +226,19 @@
 
   <!-- Result -->
   <div id="result"></div>
+  </section>
+
+  <section id="tab-history" class="tab-panel">
+  <div class="section history-section">
+    <div class="history-head">
+      <h3 style="margin-bottom:0">Past runs and predictions</h3>
+      <button type="button" onclick="loadHistory()">Refresh</button>
+    </div>
+    <div id="history-list" class="history-list">
+      <div class="history-empty">No analyses saved yet.</div>
+    </div>
+  </div>
+  </section>
 </main>
 
 <script>
@@ -210,6 +254,66 @@ const STEPS = [
 ];
 
 let stepIdx = 0, stepTimer = null;
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `tab-${tabName}`);
+  });
+  if (tabName === 'history') loadHistory();
+}
+
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '<div class="history-empty">Loading recent analyses…</div>';
+
+  try {
+    const res = await fetch('/history?limit=10');
+    if (!res.ok) throw new Error('Could not load history');
+    const entries = await res.json();
+
+    if (!entries.length) {
+      list.innerHTML = '<div class="history-empty">No analyses saved yet.</div>';
+      return;
+    }
+
+    list.innerHTML = entries.map((entry) => {
+      const symbol = escapeHtml(entry.symbol || '');
+      const company = escapeHtml(entry.company || '');
+      const runTimestamp = escapeHtml((entry.run_timestamp || '').slice(0, 16));
+      const action = escapeHtml(entry.action || 'HOLD');
+      const bias = escapeHtml(entry.bias || 'Neutral');
+      const confidence = Number(entry.confidence || 0);
+      const prediction = entry.prediction || {};
+      const direction = (horizon) => escapeHtml((prediction[horizon] || {}).direction || 'Sideways');
+      return `
+        <button type="button" class="history-item" onclick="restoreHistory(this.dataset.company, this.dataset.symbol)" data-company="${company}" data-symbol="${symbol}">
+          <div class="history-row">
+            <div class="history-symbol">${symbol} <span style="color:var(--muted);font-weight:400">${company ? '· ' + company : ''}</span></div>
+            <div class="history-meta">${runTimestamp}</div>
+          </div>
+          <div class="history-tags">
+            <span>Action: ${action}</span>
+            <span>Bias: ${bias}</span>
+            <span>Confidence: ${(confidence * 100).toFixed(0)}%</span>
+            <span>1d: ${direction('horizon_1d')}</span>
+            <span>3d: ${direction('horizon_3d')}</span>
+            <span>7d: ${direction('horizon_7d')}</span>
+          </div>
+        </button>`;
+    }).join('');
+  } catch (error) {
+    list.innerHTML = '<div class="history-empty">History could not be loaded right now.</div>';
+  }
+}
+
+function restoreHistory(company, symbol) {
+  document.getElementById('inp-company').value = company || '';
+  document.getElementById('inp-symbol').value = symbol || '';
+  switchTab('analyze');
+}
 
 function quick(company, symbol) {
   document.getElementById('inp-company').value = company;
@@ -246,6 +350,7 @@ async function runPrediction() {
 
     document.getElementById('status').style.display = 'none';
     renderResult(data);
+    loadHistory();
   } catch (e) {
     clearInterval(stepTimer);
     document.getElementById('status').style.display    = 'none';
@@ -255,6 +360,8 @@ async function runPrediction() {
 
   document.getElementById('btn-predict').disabled = false;
 }
+
+loadHistory();
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -403,15 +510,27 @@ function renderResult(data) {
 
   const articles = data.news_articles || [];
   if (articles.length) {
-    html += `<div class="section"><h3>News links</h3><div class="link-list">${articles.map((art) => {
+    html += `<div class="section"><h3>News articles</h3><div class="article-list">${articles.map((art) => {
       const url = art.url || '';
-      const label = escapeHtml(art.source || art.url || 'Source');
-      const title = escapeHtml(art.title || '');
+      const title = escapeHtml(art.title || 'Untitled article');
+      const source = escapeHtml(art.source || 'Unknown source');
       const published = escapeHtml(art.date_display || art.date || '');
-      return `<div>
-        <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>
-        ${title ? `<div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">${title}</div>` : ''}
-        ${published ? `<div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">Published: ${published}</div>` : ''}
+      const snippet = escapeHtml(art.snippet || '');
+      const point1 = escapeHtml(art.point1 || '');
+      const point2 = escapeHtml(art.point2 || '');
+      return `<div class="article-card">
+        <div class="article-head">
+          <div>
+            <div class="article-title">${title}</div>
+            <div class="article-meta">${source}${published ? ` · ${published}` : ''}</div>
+          </div>
+          ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open article</a>` : ''}
+        </div>
+        ${snippet ? `<div class="article-snippet">${snippet}</div>` : ''}
+        ${(point1 || point2) ? `<ul class="article-bullets">
+          ${point1 ? `<li>${point1}</li>` : ''}
+          ${point2 ? `<li>${point2}</li>` : ''}
+        </ul>` : ''}
       </div>`;
     }).join('')}</div></div>`;
   }

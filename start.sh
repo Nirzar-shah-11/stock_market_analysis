@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$SCRIPT_DIR/app"
 VENV_ACTIVATE="$SCRIPT_DIR/stockmarketanalysys/bin/activate"
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3:8b}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
@@ -38,4 +39,5 @@ export OLLAMA_BASE_URL
 export OLLAMA_MODEL
 
 echo "Starting Stock Market Analysis app..."
+cd "$APP_DIR"
 exec uvicorn api:app --reload --host 0.0.0.0 --port 8000
